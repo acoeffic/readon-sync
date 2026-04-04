@@ -15,6 +15,10 @@
     "@remotion/bundler": "4.0.421",
     "@remotion/renderer": "4.0.421",
     "@supabase/supabase-js": "^2.84.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remotion": "4.0.421",
+    "typescript": "^5.7.3"
   }
 }
