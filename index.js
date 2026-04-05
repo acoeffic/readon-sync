@@ -98,6 +98,71 @@ app.get('/api/wrapped/monthly/:year/:month/share', authenticateUser, async (req,
   });
 });
 
+// POST /api/wrapped/monthly/render-all
+// Called by Supabase pg_cron on the 1st of each month at 2 AM.
+// Renders monthly wrapped for ALL users who had reading sessions last month.
+// Protected by service_role_key (not user JWT).
+app.post('/api/wrapped/monthly/render-all', async (req, res) => {
+  // Verify service role key
+  const auth = req.headers.authorization;
+  if (!auth || auth !== `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Determine previous month
+  const now = new Date();
+  const month = now.getUTCMonth() === 0 ? 12 : now.getUTCMonth(); // previous month (1-12)
+  const year = now.getUTCMonth() === 0 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+
+  const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+  const end = new Date(Date.UTC(month === 12 ? year + 1 : year, month === 12 ? 0 : month, 1)).toISOString();
+
+  try {
+    // Find all users who had at least one session last month
+    const { data: sessions, error } = await supabase
+      .from('reading_sessions')
+      .select('user_id')
+      .not('end_time', 'is', null)
+      .gte('start_time', start)
+      .lt('start_time', end);
+
+    if (error) {
+      console.error('render-all query error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    const userIds = [...new Set((sessions || []).map((s) => s.user_id))];
+    console.log(`render-all: ${userIds.length} users to render for ${month}/${year}`);
+
+    res.json({ status: 'started', users: userIds.length, month, year });
+
+    // Render sequentially to avoid overloading the server
+    for (const userId of userIds) {
+      try {
+        // Upsert pending
+        await supabase
+          .from('monthly_wrapped_shares')
+          .upsert(
+            { user_id: userId, month, year, video_status: 'pending', updated_at: new Date().toISOString() },
+            { onConflict: 'user_id,month,year' },
+          );
+
+        await renderMonthlyWrapped(userId, month, year);
+        console.log(`render-all: done for user=${userId}`);
+      } catch (err) {
+        console.error(`render-all: failed for user=${userId}:`, err.message);
+      }
+    }
+
+    console.log(`render-all: completed for ${month}/${year}`);
+  } catch (err) {
+    console.error('render-all error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal error' });
+    }
+  }
+});
+
 // ======================================================================
 // BOOK FINISHED
 // ======================================================================
