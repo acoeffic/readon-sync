@@ -15,6 +15,7 @@
     "@remotion/bundler": "4.0.421",
     "@remotion/renderer": "4.0.421",
     "@supabase/supabase-js": "^2.84.0",
+    "dotenv": "^17.4.1",
     "express": "^5.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
